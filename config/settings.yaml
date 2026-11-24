@@ -1,0 +1,80 @@
+project:
+  name: "indonesia-air-quality-bigdata"
+  country_iso: "ID"
+  country_name: "Indonesia"
+  target_min_rows: 60000
+
+openaq:
+  base_url: "https://api.openaq.org/v3"
+  parameters:
+    - pm25
+    - pm10
+    - no2
+    - so2
+    - o3
+    - co
+  primary_parameter: "pm25"
+  # Rentang historis untuk penarikan data per jam (ISO-8601 UTC)
+  date_from: "2024-01-01T00:00:00Z"
+  date_to: "2026-11-01T00:00:00Z"
+  chunk_days: 90
+  locations_page_limit: 100
+  hours_page_limit: 1000
+  max_sensors: 60
+  request_timeout_sec: 30
+  max_retries: 6
+  backoff_base_sec: 2.0
+  min_request_interval_sec: 1.05
+
+paths:
+  local_raw_dir: "data/raw"
+  local_raw_file: "data/raw/openaq_indonesia_hourly.jsonl"
+  local_metadata_file: "data/raw/ingestion_metadata.json"
+  local_outputs_dir: "outputs"
+  hdfs_base_dir: "/air_quality"
+  hdfs_raw_dir: "/air_quality/raw"
+  hdfs_raw_file: "/air_quality/raw/openaq_indonesia_hourly.jsonl"
+  hdfs_processed_dir: "/air_quality/processed/hourly_wide.parquet"
+  hdfs_ml_dataset_dir: "/air_quality/processed/ml_features.parquet"
+  hdfs_model_dir: "/air_quality/models/linear_svc"
+
+preprocessing:
+  pollutant_bounds:
+    pm25: [0.0, 1000.0]
+    pm10: [0.0, 2000.0]
+    no2: [0.0, 2000.0]
+    so2: [0.0, 2000.0]
+    o3: [0.0, 1000.0]
+    co: [0.0, 50000.0]
+  utc_offset_hours: 7
+
+thresholds:
+  primary_pollutant: "pm25"
+  pm25_unhealthy: 35.4
+  standard_name: "US EPA Moderate-to-USG (PM2.5 > 35.4 ug/m3)"
+  who_24h_guideline_pm25: 15.0
+  klhk_ispu_unhealthy_pm25: 55.4
+
+ml:
+  target_pollutant: "pm25"
+  threshold: 35.4
+  horizon_hours: 1
+  lag_hours: [1, 2, 3, 24]
+  rolling_windows_hours: [3, 6]
+  train_ratio: 0.80
+  linear_svc:
+    max_iter: 100
+    reg_param: 0.1
+    threshold: 0.0
+    standardization: false
+
+benchmark:
+  fractions: [0.25, 0.50, 1.00]
+  shuffle_partitions: 8
+
+mongodb:
+  collections:
+    analytics_summary: "analytics_summary"
+    model_predictions: "model_predictions"
+    benchmark_results: "benchmark_results"
+  sample_predictions_limit: 500
